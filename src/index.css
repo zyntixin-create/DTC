@@ -1,0 +1,48 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    background-color: #FFFFFF;
+    color: #111827;
+  }
+}
+
+/* Custom Bus & Transit Marker Styles */
+.leaflet-container {
+  font-family: 'Inter', system-ui, sans-serif !important;
+  width: 100%;
+  height: 100%;
+  background: #EBF1F7 !important;
+}
+
+.leaflet-control-attribution {
+  font-size: 10px !important;
+  background-color: rgba(255, 255, 255, 0.85) !important;
+  border-radius: 4px;
+}
+
+.bus-marker-container, .stop-marker-container, .user-location-marker {
+  background: transparent;
+  border: none;
+}
+
+/* Marker pulse for selected bus */
+@keyframes bus-pulse {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(244, 123, 32, 0.7);
+  }
+  70% {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 10px rgba(244, 123, 32, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(244, 123, 32, 0);
+  }
+}
+
+.bus-selected-pulse {
+  animation: bus-pulse 1.8s infinite;
+}

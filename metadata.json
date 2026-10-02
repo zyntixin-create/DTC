@@ -1,0 +1,6 @@
+{
+  "name": "Delhi Yatra – DTC Bus & Metro Route Finder",
+  "description": "Delhi public transport route planner: DTC & Cluster bus tracking, timetable, stops, metro interchanges, and journey finder.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

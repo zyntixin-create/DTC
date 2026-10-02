@@ -14,6 +14,9 @@ import {
 import { gtfsApi } from '../services/gtfsApi';
 import { Language, translations, Translations } from '../utils/i18n';
 import { MetroStation, DELHI_METRO_STATIONS } from '../data/delhiMetroData';
+import { auth, db, googleProvider, testConnection, handleFirestoreError, OperationType } from '../services/firebase';
+import { onAuthStateChanged, signInWithPopup, signOut as fbSignOut, User } from 'firebase/auth';
+import { collection, doc, setDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
 
 export function calculateDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371;
@@ -163,6 +166,12 @@ interface TransitContextType {
   // Active Journey for Map Rendering
   activeJourneyOption: any | null;
   setActiveJourneyOption: (opt: any | null) => void;
+
+  // Firebase Auth & Cloud Sync
+  user: User | null;
+  authLoading: boolean;
+  loginWithGoogle: () => Promise<void>;
+  logoutUser: () => Promise<void>;
 }
 
 // Helper to validate Google Cloud / Google Maps Platform API key format
@@ -423,6 +432,47 @@ export const TransitProvider: React.FC<{ children: React.ReactNode }> = ({ child
   });
   const [locationStatus, setLocationStatus] = useState<'prompt' | 'granted' | 'denied' | 'custom'>('prompt');
 
+  // Firebase Auth state
+  const [user, setUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  // Test Firestore connection on boot (as required by skill)
+  useEffect(() => {
+    testConnection();
+  }, []);
+
+  // Listen to Auth state
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, async (currentUser) => {
+      setUser(currentUser);
+      setAuthLoading(false);
+
+      if (currentUser) {
+        // Sync or initialize user profile in Firestore
+        const userPath = `users/${currentUser.uid}`;
+        try {
+          await setDoc(
+            doc(db, 'users', currentUser.uid),
+            {
+              uid: currentUser.uid,
+              displayName: currentUser.displayName || 'Delhi Commuter',
+              email: currentUser.email || '',
+              language,
+              defaultMode: 'bus',
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            },
+            { merge: true }
+          );
+        } catch (err) {
+          handleFirestoreError(err, OperationType.WRITE, userPath);
+        }
+      }
+    });
+
+    return () => unsub();
+  }, [language]);
+
   // Favorites
   const [favorites, setFavorites] = useState<Favorites>(() => {
     try {
@@ -433,6 +483,56 @@ export const TransitProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
     return { routes: ['1183', '1876'], stops: ['770', '1050'] };
   });
+
+  // Sync favorites in real-time from Firestore when user is logged in
+  useEffect(() => {
+    if (!user) return;
+    const favPath = `users/${user.uid}/favorites`;
+
+    const unsub = onSnapshot(
+      collection(db, favPath),
+      (snapshot) => {
+        const fbRoutes: string[] = [];
+        const fbStops: string[] = [];
+        snapshot.forEach((docSnap) => {
+          const d = docSnap.data();
+          if (d.itemType === 'route' && d.itemId) fbRoutes.push(d.itemId);
+          if (d.itemType === 'stop' && d.itemId) fbStops.push(d.itemId);
+        });
+
+        if (fbRoutes.length > 0 || fbStops.length > 0) {
+          setFavorites((prev) => ({
+            routes: Array.from(new Set([...prev.routes, ...fbRoutes])),
+            stops: Array.from(new Set([...prev.stops, ...fbStops]))
+          }));
+        }
+      },
+      (err) => {
+        handleFirestoreError(err, OperationType.GET, favPath);
+      }
+    );
+
+    return () => unsub();
+  }, [user]);
+
+  const loginWithGoogle = useCallback(async () => {
+    setAuthLoading(true);
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (err) {
+      console.error('Google Sign-in failed:', err);
+    } finally {
+      setAuthLoading(false);
+    }
+  }, []);
+
+  const logoutUser = useCallback(async () => {
+    try {
+      await fbSignOut(auth);
+    } catch (err) {
+      console.error('Sign-out failed:', err);
+    }
+  }, []);
 
   useEffect(() => {
     try {
@@ -654,9 +754,29 @@ export const TransitProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const toggleFavoriteRoute = useCallback((routeId: string) => {
     setFavorites((prev) => {
       const exists = prev.routes.includes(routeId);
+      const updated = exists ? prev.routes.filter((r) => r !== routeId) : [...prev.routes, routeId];
+
+      if (auth.currentUser) {
+        const docId = `route_${routeId}`;
+        const path = `users/${auth.currentUser.uid}/favorites/${docId}`;
+        if (!exists) {
+          setDoc(doc(db, `users/${auth.currentUser.uid}/favorites`, docId), {
+            userId: auth.currentUser.uid,
+            itemType: 'route',
+            itemId: routeId,
+            title: `Route #${routeId}`,
+            subtitle: 'DTC Bus Route',
+            createdAt: new Date().toISOString()
+          }).catch((err) => handleFirestoreError(err, OperationType.WRITE, path));
+        } else {
+          deleteDoc(doc(db, `users/${auth.currentUser.uid}/favorites`, docId))
+            .catch((err) => handleFirestoreError(err, OperationType.DELETE, path));
+        }
+      }
+
       return {
         ...prev,
-        routes: exists ? prev.routes.filter((r) => r !== routeId) : [...prev.routes, routeId],
+        routes: updated,
       };
     });
   }, []);
@@ -664,9 +784,29 @@ export const TransitProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const toggleFavoriteStop = useCallback((stopId: string) => {
     setFavorites((prev) => {
       const exists = prev.stops.includes(stopId);
+      const updated = exists ? prev.stops.filter((s) => s !== stopId) : [...prev.stops, stopId];
+
+      if (auth.currentUser) {
+        const docId = `stop_${stopId}`;
+        const path = `users/${auth.currentUser.uid}/favorites/${docId}`;
+        if (!exists) {
+          setDoc(doc(db, `users/${auth.currentUser.uid}/favorites`, docId), {
+            userId: auth.currentUser.uid,
+            itemType: 'stop',
+            itemId: stopId,
+            title: `Stop #${stopId}`,
+            subtitle: 'DTC Bus Stop',
+            createdAt: new Date().toISOString()
+          }).catch((err) => handleFirestoreError(err, OperationType.WRITE, path));
+        } else {
+          deleteDoc(doc(db, `users/${auth.currentUser.uid}/favorites`, docId))
+            .catch((err) => handleFirestoreError(err, OperationType.DELETE, path));
+        }
+      }
+
       return {
         ...prev,
-        stops: exists ? prev.stops.filter((s) => s !== stopId) : [...prev.stops, stopId],
+        stops: updated,
       };
     });
   }, []);
@@ -675,6 +815,10 @@ export const TransitProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const isFavoriteStop = useCallback((stopId: string) => favorites.stops.includes(stopId), [favorites.stops]);
 
   const value = {
+    user,
+    authLoading,
+    loginWithGoogle,
+    logoutUser,
     language,
     setLanguage,
     t,

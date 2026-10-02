@@ -1,0 +1,99 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['uid', 'createdAt']) &&
+        data.keys().hasOnly(['uid', 'displayName', 'email', 'language', 'defaultMode', 'createdAt', 'updatedAt']) &&
+        data.uid is string && data.uid == request.auth.uid &&
+        (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 100)) &&
+        (!('email' in data) || (data.email is string && data.email.size() <= 200)) &&
+        (!('language' in data) || data.language in ['en', 'hi']) &&
+        (!('defaultMode' in data) || data.defaultMode in ['bus', 'metro']);
+    }
+
+    function isValidUserFavorite(data) {
+      return data.keys().hasAll(['userId', 'itemType', 'itemId', 'title', 'createdAt']) &&
+        data.keys().hasOnly(['userId', 'itemType', 'itemId', 'title', 'subtitle', 'createdAt']) &&
+        data.userId is string && data.userId == request.auth.uid &&
+        data.itemType in ['route', 'stop', 'station', 'journey'] &&
+        data.itemId is string && data.itemId.size() <= 128 &&
+        data.title is string && data.title.size() <= 200 &&
+        (!('subtitle' in data) || (data.subtitle is string && data.subtitle.size() <= 200));
+    }
+
+    function isValidUserReport(data) {
+      return data.keys().hasAll(['userId', 'issueType', 'description', 'createdAt']) &&
+        data.keys().hasOnly(['userId', 'authorName', 'routeNumber', 'issueType', 'description', 'stopName', 'createdAt']) &&
+        data.userId is string && data.userId == request.auth.uid &&
+        data.issueType in ['delay', 'breakdown', 'crowded', 'route_diverted', 'other'] &&
+        data.description is string && data.description.size() <= 500 &&
+        (!('authorName' in data) || (data.authorName is string && data.authorName.size() <= 100)) &&
+        (!('routeNumber' in data) || (data.routeNumber is string && data.routeNumber.size() <= 30)) &&
+        (!('stopName' in data) || (data.stopName is string && data.stopName.size() <= 150));
+    }
+
+    // Connection testing endpoint
+    match /test/{testId} {
+      allow get: if true;
+    }
+
+    // User profile documents
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow list: if false;
+      allow create: if isOwner(userId) && isValidId(userId) && isValidUserProfile(incoming());
+      allow update: if isOwner(userId) && isValidId(userId) && isValidUserProfile(incoming()) &&
+        incoming().uid == existing().uid && incoming().createdAt == existing().createdAt;
+      allow delete: if isOwner(userId) && isValidId(userId);
+
+      // User's favorites subcollection
+      match /favorites/{favoriteId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidId(userId) && isValidId(favoriteId) &&
+          isValidUserFavorite(incoming()) && incoming().userId == userId;
+        allow update: if isOwner(userId) && isValidId(userId) && isValidId(favoriteId) &&
+          isValidUserFavorite(incoming()) && incoming().userId == existing().userId &&
+          incoming().createdAt == existing().createdAt;
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(favoriteId);
+      }
+    }
+
+    // Crowdsourced transit alerts & reports
+    match /reports/{reportId} {
+      allow get, list: if true;
+      allow create: if isSignedIn() && isValidId(reportId) && isValidUserReport(incoming()) &&
+        incoming().userId == request.auth.uid;
+      allow update: if isSignedIn() && isValidId(reportId) && isValidUserReport(incoming()) &&
+        existing().userId == request.auth.uid && incoming().userId == existing().userId &&
+        incoming().createdAt == existing().createdAt;
+      allow delete: if isSignedIn() && isValidId(reportId) && existing().userId == request.auth.uid;
+    }
+  }
+}

@@ -18,9 +18,12 @@ export const MetroStationDetailModal: React.FC = () => {
 
   const handleShareClick = () => {
     const url = `${window.location.origin}/#/metro/${selectedMetroStation.id}`;
+    const busText = (selectedMetroStation.connectingBusNumbers || []).length > 0
+      ? `. Connects with DTC buses: ${(selectedMetroStation.connectingBusNumbers || []).slice(0, 6).join(', ')}`
+      : '';
     setShareData({
       title: `${selectedMetroStation.name} - Delhi Metro`,
-      text: `Metro station with interchange lines: ${selectedMetroStation.lines.join(', ')}. Connects with DTC buses: ${selectedMetroStation.connectingBusNumbers.slice(0, 6).join(', ')}`,
+      text: `Metro station with interchange lines: ${selectedMetroStation.lines.join(', ')}${busText}`,
       url
     });
   };
@@ -77,13 +80,13 @@ export const MetroStationDetailModal: React.FC = () => {
           {/* Details Content */}
           <div className="p-4 sm:p-5 space-y-6 overflow-y-auto flex-1 bg-white">
             {/* Connecting Bus Numbers */}
-            {selectedMetroStation.connectingBusNumbers.length > 0 && (
+            {(selectedMetroStation.connectingBusNumbers || []).length > 0 && (
               <div>
                 <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
-                  Connecting DTC Bus Numbers ({selectedMetroStation.connectingBusNumbers.length})
+                  Connecting DTC Bus Numbers ({(selectedMetroStation.connectingBusNumbers || []).length})
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {selectedMetroStation.connectingBusNumbers.map((busNum, idx) => (
+                  {(selectedMetroStation.connectingBusNumbers || []).map((busNum: string, idx: number) => (
                     <button
                       key={idx}
                       onClick={async () => {
@@ -99,13 +102,13 @@ export const MetroStationDetailModal: React.FC = () => {
             )}
 
             {/* Nearby Bus Stops */}
-            {selectedMetroStation.nearbyBusStops.length > 0 && (
+            {(selectedMetroStation.nearbyBusStops || []).length > 0 && (
               <div>
                 <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
                   Nearby Bus Stops
                 </div>
                 <div className="divide-y divide-gray-100 border-t border-b border-gray-100">
-                  {selectedMetroStation.nearbyBusStops.map((st, idx) => (
+                  {(selectedMetroStation.nearbyBusStops || []).map((st: any, idx: number) => (
                     <div
                       key={idx}
                       className="py-3 px-1 flex items-center justify-between text-xs sm:text-sm"

@@ -1,0 +1,62 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User account profile and transit preferences",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID", "maxLength": 128 },
+        "displayName": { "type": "string", "description": "User display name", "maxLength": 100 },
+        "email": { "type": "string", "description": "User email address", "maxLength": 200 },
+        "language": { "type": "string", "description": "Preferred language (en or hi)", "enum": ["en", "hi"] },
+        "defaultMode": { "type": "string", "description": "Default transport mode", "enum": ["bus", "metro"] },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Account created timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Account updated timestamp" }
+      },
+      "required": ["uid", "createdAt"]
+    },
+    "UserFavorite": {
+      "title": "UserFavorite",
+      "description": "Saved bus route, stop, or metro station",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner user ID", "maxLength": 128 },
+        "itemType": { "type": "string", "description": "Type of saved item", "enum": ["route", "stop", "station", "journey"] },
+        "itemId": { "type": "string", "description": "Identifier of item", "maxLength": 128 },
+        "title": { "type": "string", "description": "Item display title", "maxLength": 200 },
+        "subtitle": { "type": "string", "description": "Secondary detail", "maxLength": 200 },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Saved timestamp" }
+      },
+      "required": ["userId", "itemType", "itemId", "title", "createdAt"]
+    },
+    "UserReport": {
+      "title": "UserReport",
+      "description": "Crowdsourced service alert or bus delay report",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Author user ID", "maxLength": 128 },
+        "authorName": { "type": "string", "description": "Author display name", "maxLength": 100 },
+        "routeNumber": { "type": "string", "description": "Bus route number or line", "maxLength": 30 },
+        "issueType": { "type": "string", "description": "Type of issue reported", "enum": ["delay", "breakdown", "crowded", "route_diverted", "other"] },
+        "description": { "type": "string", "description": "Report explanation", "maxLength": 500 },
+        "stopName": { "type": "string", "description": "Location or stop name", "maxLength": 150 },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Report timestamp" }
+      },
+      "required": ["userId", "issueType", "description", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User profiles and settings"
+    },
+    "/users/{userId}/favorites/{favoriteId}": {
+      "schema": { "$ref": "#/entities/UserFavorite" },
+      "description": "User saved favorite routes, stops, and stations"
+    },
+    "/reports/{reportId}": {
+      "schema": { "$ref": "#/entities/UserReport" },
+      "description": "Transit community reports and service alerts"
+    }
+  }
+}

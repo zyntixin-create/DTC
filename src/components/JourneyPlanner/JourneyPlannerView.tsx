@@ -3,6 +3,9 @@ import { useTransit } from '../../context/TransitContext';
 import { GtfsStop } from '../../types/transit';
 import { gtfsApi } from '../../services/gtfsApi';
 import { DelhiMap } from '../Map/DelhiMap';
+import { DelhiMetroMap } from '../Metro/DelhiMetroMap';
+import { MetroPlannerSheet } from '../Metro/MetroPlannerSheet';
+import { MetroRoutePlan } from '../../data/delhiMetroData';
 import { DtcBusGraphic } from '../Common/DtcBusGraphic';
 import {
   ArrowUpDown,
@@ -26,8 +29,13 @@ export const JourneyPlannerView: React.FC = () => {
     setActiveJourneyOption,
     requestUserLocation,
     userLocation,
-    selectStopById
+    selectStopById,
+    openMetroStation
   } = useTransit();
+
+  // Mode: 'bus' | 'metro'
+  const [transportMode, setTransportMode] = useState<'bus' | 'metro'>('bus');
+  const [selectedMetroRoute, setSelectedMetroRoute] = useState<MetroRoutePlan | null>(null);
 
   // Search input state
   const [fromQuery, setFromQuery] = useState('Bijwasan');
@@ -293,51 +301,108 @@ export const JourneyPlannerView: React.FC = () => {
       {/* 1. FULL SCREEN LEAFLET MAP IN BACKGROUND                                  */}
       {/* ========================================================================= */}
       <div className="absolute inset-0 z-0 w-full h-full">
-        <DelhiMap
-          journeyOption={currentActiveOption}
-          heightClass="h-full w-full"
-          minimalControls={true}
-        />
+        {transportMode === 'bus' ? (
+          <DelhiMap
+            journeyOption={currentActiveOption}
+            heightClass="h-full w-full"
+            minimalControls={true}
+          />
+        ) : (
+          <DelhiMetroMap
+            selectedRoute={selectedMetroRoute}
+            heightClass="h-full w-full"
+            onStationClick={(st) => openMetroStation(st.id)}
+          />
+        )}
       </div>
 
       {/* ========================================================================= */}
       {/* 2. FLOATING COMPACT TOP HEADER                                            */}
       {/* ========================================================================= */}
-      <div className="absolute top-3 left-3 right-3 sm:left-4 sm:right-4 z-20 pointer-events-none">
-        <div className="flex items-center justify-between bg-white/95 backdrop-blur-md px-3.5 py-2 rounded-2xl shadow-md border border-gray-200/80 pointer-events-auto max-w-md mx-auto">
-          {/* Left Brand: DTC Yatra / Delhi Bus Tracker */}
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-xl bg-orange-600 text-white flex items-center justify-center font-black text-xs tracking-tight shadow-xs shrink-0 select-none">
-              DTC
+      <div className="absolute top-2.5 left-2.5 right-2.5 sm:left-4 sm:right-4 z-20 pointer-events-none">
+        <div className="flex items-center justify-between bg-white/95 backdrop-blur-md px-3 py-1.5 rounded-2xl shadow-md border border-gray-200/80 pointer-events-auto max-w-md mx-auto">
+          {/* Left Brand: DTC Yatra */}
+          <div className="flex items-center gap-2 min-w-0">
+            <div
+              className={`w-7 h-7 rounded-xl ${
+                transportMode === 'bus' ? 'bg-orange-600' : 'bg-blue-600'
+              } text-white flex items-center justify-center font-black text-xs tracking-tight shadow-xs shrink-0 select-none`}
+            >
+              {transportMode === 'bus' ? 'DTC' : '🚇'}
             </div>
             <div className="min-w-0">
-              <h1 className="text-sm font-black text-gray-900 tracking-tight leading-none">
+              <h1 className="text-xs sm:text-sm font-black text-gray-900 tracking-tight leading-none">
                 DTC Yatra
               </h1>
               <p className="text-[10px] text-gray-500 font-medium leading-none mt-0.5">
-                Delhi Bus Tracker
+                {transportMode === 'bus' ? 'Delhi Bus Tracker' : 'Delhi Metro Navigator'}
               </p>
             </div>
           </div>
 
-          {/* Right: 📍 Location Icon Button */}
-          <div className="flex items-center gap-1.5">
+          {/* Mode Switcher Tabs: 🚌 DTC Bus | 🚇 Delhi Metro */}
+          <div className="flex items-center bg-gray-100/90 p-0.5 rounded-xl border border-gray-200/80 mx-1">
             <button
               type="button"
-              onClick={requestUserLocation}
-              className="w-8 h-8 rounded-full bg-orange-50 hover:bg-orange-100 active:bg-orange-200 text-orange-600 flex items-center justify-center transition cursor-pointer border border-orange-200/60 shadow-2xs"
-              title="Locate my position in Delhi"
-              aria-label="Current Location"
+              onClick={() => setTransportMode('bus')}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer select-none ${
+                transportMode === 'bus'
+                  ? 'bg-white text-orange-600 shadow-xs'
+                  : 'text-gray-500 hover:text-gray-800'
+              }`}
             >
-              <Navigation className="w-4 h-4 fill-orange-600/20" />
+              <span>🚌</span>
+              <span className="hidden xs:inline">DTC Bus</span>
+              <span className="xs:hidden">Bus</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setTransportMode('metro')}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer select-none ${
+                transportMode === 'metro'
+                  ? 'bg-white text-blue-600 shadow-xs'
+                  : 'text-gray-500 hover:text-gray-800'
+              }`}
+            >
+              <span>🚇</span>
+              <span className="hidden xs:inline">Delhi Metro</span>
+              <span className="xs:hidden">Metro</span>
             </button>
           </div>
+
+          {/* Right: 📍 Location Icon Button */}
+          <button
+            type="button"
+            onClick={requestUserLocation}
+            className={`w-7 h-7 rounded-full ${
+              transportMode === 'bus'
+                ? 'bg-orange-50 hover:bg-orange-100 active:bg-orange-200 text-orange-600 border-orange-200/60'
+                : 'bg-blue-50 hover:bg-blue-100 active:bg-blue-200 text-blue-600 border-blue-200/60'
+            } flex items-center justify-center transition cursor-pointer border shadow-2xs shrink-0`}
+            title="Locate my position in Delhi"
+            aria-label="Current Location"
+          >
+            <Navigation className="w-3.5 h-3.5 fill-current/20" />
+          </button>
         </div>
       </div>
 
       {/* ========================================================================= */}
-      {/* 3. ROUNDED WHITE BOTTOM SHEET                                             */}
+      {/* 3. METRO BOTTOM SHEET (WHEN METRO MODE IS ACTIVE)                         */}
       {/* ========================================================================= */}
+      {transportMode === 'metro' && (
+        <MetroPlannerSheet
+          onRouteSelect={setSelectedMetroRoute}
+          selectedRoute={selectedMetroRoute}
+          onStationClick={(st) => openMetroStation(st.id)}
+        />
+      )}
+
+      {/* ========================================================================= */}
+      {/* 4. BUS BOTTOM SHEET (WHEN BUS MODE IS ACTIVE)                             */}
+      {/* ========================================================================= */}
+      {transportMode === 'bus' && (
       <div
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
@@ -1027,6 +1092,7 @@ export const JourneyPlannerView: React.FC = () => {
           )}
         </div>
       </div>
+      )}
     </div>
   );
 };
